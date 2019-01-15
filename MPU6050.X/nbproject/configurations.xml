@@ -4,6 +4,13 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
+      <logicalFolder name="f1" displayName="DMP" projectFiles="true">
+        <itemPath>../eMPL/dmpKey.h</itemPath>
+        <itemPath>../eMPL/dmpmap.h</itemPath>
+        <itemPath>../eMPL/inv_mpu.h</itemPath>
+        <itemPath>../eMPL/inv_mpu_dmp_motion_driver.h</itemPath>
+      </logicalFolder>
+      <itemPath>../src/MPU6050.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -12,11 +19,12 @@
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
                    projectFiles="true">
+      <logicalFolder name="f1" displayName="DMP" projectFiles="true">
+        <itemPath>../eMPL/inv_mpu_dmp_motion_driver.c</itemPath>
+        <itemPath>../eMPL/inv_mpu.c</itemPath>
+      </logicalFolder>
       <itemPath>main.c</itemPath>
       <itemPath>../src/MPU6050.c</itemPath>
-      <itemPath>../src/MPU6050.h</itemPath>
-      <itemPath>../eMPL/inv_mpu.c</itemPath>
-      <itemPath>../eMPL/inv_mpu_dmp_motion_driver.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"
