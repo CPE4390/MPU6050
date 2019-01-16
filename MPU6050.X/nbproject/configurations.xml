@@ -20,8 +20,6 @@
                    displayName="Source Files"
                    projectFiles="true">
       <logicalFolder name="f1" displayName="DMP" projectFiles="true">
-        <itemPath>../eMPL/inv_mpu_dmp_motion_driver.c</itemPath>
-        <itemPath>../eMPL/inv_mpu.c</itemPath>
       </logicalFolder>
       <itemPath>main.c</itemPath>
       <itemPath>../src/MPU6050.c</itemPath>
