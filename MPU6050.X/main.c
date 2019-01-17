@@ -39,12 +39,21 @@
 //Project includes
 #include <stdio.h>
 #include "../src/MPU6050.h"
+#include "../eMPL/inv_mpu.h"
+#include "../eMPL/inv_mpu_dmp_motion_driver.h"
 
 /*
 Connections:
         Master RD5 <-> SDA
         Master RD6 <-> SCL
+        Master RB1 <-> INT
  */
+
+volatile char dataReady = 0; 
+short gyro[3];
+short accel[3];
+long quat[4];
+unsigned long timeStamp;
 
 void main(void) {
     OSCTUNEbits.PLLEN = 1;
@@ -58,6 +67,13 @@ void main(void) {
     RCSTA1bits.SPEN = 1; 
     TXSTA1bits.TXEN = 1;
     printf("Starting\r\n");
+    
+    //setup INT1 for falling edge
+    TRISB |= 0b00000010;
+    INTCON2bits.INTEDG1 = 0;
+    INTCON3bits.INT1IE = 1;    
+    INTCON3bits.INT1IF = 0;
+    
     //setup Timer2 for 1ms ticks
     T2CONbits.T2CKPS = 0b10; //1:16 prescale
     T2CONbits.TOUTPS = 4; //1:5 postscale gives 100 kHz count rate
@@ -66,23 +82,43 @@ void main(void) {
     tickCount = 0;
     PIR1bits.TMR2IF = 0;
     PIE1bits.TMR2IE = 1;
+    
+    //enable interrupts and turn on TMR2
     INTCONbits.PEIE = 1;
     INTCONbits.GIE = 1;
     T2CONbits.TMR2ON = 1;
+    
     pic18_i2c_enable();
     unsigned char reg;
     pic18_i2c_read(0x68, 117, 1, &reg);
     printf("Who am I = %02x\r\n", reg);
-    pic18_i2c_read(0x68, 107, 1, &reg);
-    printf("Power = %02x\r\n", reg);
-    reg = 0x01;
-    pic18_i2c_write(0x68, 107, 1, &reg);
-    reg = 0xff;
-    pic18_i2c_read(0x68, 107, 1, &reg);
-    printf("New Power = %02x\r\n", reg);
+    int error = 0;
+    error = mpu_init();
+    if (error) {
+        printf("mpu_init failed\r\n");
+    } else {
+        printf("mpu initialized\r\n");
+    }
+    long gyroBias[4];
+    long accelBias[4];
+    error = mpu_run_self_test(gyroBias, accelBias);
+    if (error) {
+        printf("self test failed = 0x02\r\n", error);
+    } else {
+        printf("passed self test\r\n");
+    }
+    mpu_set_sensors(INV_XYZ_GYRO | INV_XYZ_ACCEL);
+    mpu_configure_fifo(INV_XYZ_GYRO | INV_XYZ_ACCEL);
+    mpu_set_sample_rate(4);
+    
     while (1) {
-        if (tickCount % 1000 == 0) {
-            printf("Time: %ld\r\n", tickCount);
+        if (dataReady) {
+            dataReady = 0;
+            unsigned char sensors;
+            unsigned char more;
+            mpu_read_fifo(gyro, accel, &timeStamp, &sensors, &more);
+            printf("Accel: %d %d %d\r\n", accel[0], accel[1], accel[2]);
+            printf("Gyro: %d %d %d\r\n\r\n", gyro[0], gyro[1], gyro[2]);
         }
     }
 }
@@ -91,6 +127,10 @@ void __interrupt(high_priority) HighIsr(void) {
     if (PIR1bits.TMR2IF == 1) {
         ++tickCount;
         PIR1bits.TMR2IF = 0;
+    }
+    if (INTCON3bits.INT1IF == 1) {
+        dataReady = 1;
+        INTCON3bits.INT1IF = 0;
     }
 }
 
