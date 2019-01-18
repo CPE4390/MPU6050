@@ -49,7 +49,7 @@ Connections:
         Master RB1 <-> INT
  */
 
-volatile char dataReady = 0; 
+volatile char dataReady = 0;
 short gyro[3];
 short accel[3];
 long quat[4];
@@ -57,23 +57,23 @@ unsigned long timeStamp;
 
 void main(void) {
     OSCTUNEbits.PLLEN = 1;
-    __delay_ms(10);  //Wait for PLL to stabilize
+    __delay_ms(10); //Wait for PLL to stabilize
     //Configure the USART for 115200 baud asynchronous transmission
     SPBRG1 = 68; //115200 baud
-    SPBRGH1 = 0; 
+    SPBRGH1 = 0;
     TXSTA1bits.BRGH = 1;
     BAUDCON1bits.BRG16 = 1;
     TXSTA1bits.SYNC = 0;
-    RCSTA1bits.SPEN = 1; 
+    RCSTA1bits.SPEN = 1;
     TXSTA1bits.TXEN = 1;
     printf("Starting\r\n");
-    
+
     //setup INT1 for falling edge
     TRISB |= 0b00000010;
     INTCON2bits.INTEDG1 = 0;
-    INTCON3bits.INT1IE = 1;    
+    INTCON3bits.INT1IE = 1;
     INTCON3bits.INT1IF = 0;
-    
+
     //setup Timer2 for 1ms ticks
     T2CONbits.T2CKPS = 0b10; //1:16 prescale
     T2CONbits.TOUTPS = 4; //1:5 postscale gives 100 kHz count rate
@@ -82,12 +82,12 @@ void main(void) {
     tickCount = 0;
     PIR1bits.TMR2IF = 0;
     PIE1bits.TMR2IE = 1;
-    
+
     //enable interrupts and turn on TMR2
     INTCONbits.PEIE = 1;
     INTCONbits.GIE = 1;
     T2CONbits.TMR2ON = 1;
-    
+
     pic18_i2c_enable();
     unsigned char reg;
     pic18_i2c_read(0x68, 117, 1, &reg);
@@ -99,18 +99,22 @@ void main(void) {
     } else {
         printf("mpu initialized\r\n");
     }
-    long gyroBias[4];
-    long accelBias[4];
-    error = mpu_run_self_test(gyroBias, accelBias);
-    if (error) {
-        printf("self test failed = 0x02\r\n", error);
-    } else {
-        printf("passed self test\r\n");
-    }
     mpu_set_sensors(INV_XYZ_GYRO | INV_XYZ_ACCEL);
+    long gyroBias[3];
+    long accelBias[3];
+    error = mpu_run_self_test(gyroBias, accelBias);
+    printf("self test result = %02x\r\n", error);
+    for (int i = 0; i < 3; i++) {
+        gyroBias[i] = (long) (gyroBias[i] * 32.8f); //convert to +-1000dps
+        accelBias[i] *= 2048.f; //convert to +-16G
+        accelBias[i] = accelBias[i] >> 16;
+        gyroBias[i] = (long) (gyroBias[i] >> 16);
+    }
+    mpu_set_gyro_bias_reg(gyroBias);
+    mpu_set_accel_bias_6050_reg(accelBias);
     mpu_configure_fifo(INV_XYZ_GYRO | INV_XYZ_ACCEL);
     mpu_set_sample_rate(4);
-    
+
     while (1) {
         if (dataReady) {
             dataReady = 0;

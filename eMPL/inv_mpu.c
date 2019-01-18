@@ -2069,7 +2069,10 @@ static int get_st_biases(long *gyro, long *accel, unsigned char hw_test) {
     accel[2] = (long) (((float) accel[2]*65536.f) / test.accel_sens /
             packet_count);
     /* Don't remove gravity! */
-    accel[2] -= 65536L;
+    if (accel[2] > 0L)
+        accel[2] -= 65536L;
+    else
+        accel[2] += 65536L;
 #else
     gyro[0] = (long) (((long long) gyro[0] << 16) / test.gyro_sens / packet_count);
     gyro[1] = (long) (((long long) gyro[1] << 16) / test.gyro_sens / packet_count);
