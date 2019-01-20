@@ -41,6 +41,7 @@
 #include "../src/MPU6050.h"
 #include "../eMPL/inv_mpu.h"
 #include "../eMPL/inv_mpu_dmp_motion_driver.h"
+#include <math.h>
 
 /*
 Connections:
@@ -54,10 +55,17 @@ short gyro[3];
 short accel[3];
 long quat[4];
 unsigned long timeStamp;
+signed char gyroMatrix[9] = {0, 1, 0,
+    1, 0, 0,
+    0, 0, 1};
+
+void computeEulerAngles(long *quat);
 
 void main(void) {
     OSCTUNEbits.PLLEN = 1;
     __delay_ms(10); //Wait for PLL to stabilize
+    TRISDbits.TRISD0 = 0;
+    LATDbits.LATD0 = 1;
     //Configure the USART for 115200 baud asynchronous transmission
     SPBRG1 = 68; //115200 baud
     SPBRGH1 = 0;
@@ -83,13 +91,9 @@ void main(void) {
     PIR1bits.TMR2IF = 0;
     PIE1bits.TMR2IE = 1;
 
-    //enable interrupts and turn on TMR2
-    INTCONbits.PEIE = 1;
-    INTCONbits.GIE = 1;
-    T2CONbits.TMR2ON = 1;
-
     pic18_i2c_enable();
-    unsigned char reg;
+    unsigned char reg = 0;
+    mpuReset();
     pic18_i2c_read(0x68, 117, 1, &reg);
     printf("Who am I = %02x\r\n", reg);
     int error = 0;
@@ -103,7 +107,29 @@ void main(void) {
     long gyroBias[3];
     long accelBias[3];
     error = mpu_run_self_test(gyroBias, accelBias);
-    printf("self test result = %02x\r\n", error);
+    printf("Self test:\r\n");
+    printf("   Gyro:");
+    if (error & 1) {
+        printf("PASSED\r\n");
+    } else {
+        printf("FAILED\r\n");
+    }
+    printf("   Accelerometer:");
+    if (error & 2) {
+        printf("PASSED\r\n");
+    } else {
+        printf("FAILED\r\n");
+    }
+    printf("   Compass:");
+    if (error & 4) {
+        printf("PASSED\r\n");
+    } else {
+        printf("FAILED\r\n");
+    }
+    if (error != 0x07) {
+        printf("Halting\r\n");
+        while (1);
+    }
     for (int i = 0; i < 3; i++) {
         gyroBias[i] = (long) (gyroBias[i] * 32.8f); //convert to +-1000dps
         accelBias[i] *= 2048.f; //convert to +-16G
@@ -114,15 +140,43 @@ void main(void) {
     mpu_set_accel_bias_6050_reg(accelBias);
     mpu_configure_fifo(INV_XYZ_GYRO | INV_XYZ_ACCEL);
     mpu_set_sample_rate(4);
-
+    do {
+        error = dmp_load_motion_driver_firmware();
+        if (error) {
+            printf("Error loading motion driver\r\n");
+        } else {
+            printf("Motion driver loaded\r\n");
+        }
+    } while (error);
+    __delay_ms(1000);
+    dmp_set_orientation(inv_orientation_matrix_to_scalar(gyroMatrix));
+    dmp_enable_feature(DMP_FEATURE_6X_LP_QUAT | DMP_FEATURE_SEND_RAW_ACCEL
+            | DMP_FEATURE_SEND_CAL_GYRO | DMP_FEATURE_GYRO_CAL | DMP_FEATURE_TAP);
+    dmp_set_interrupt_mode(DMP_INT_CONTINUOUS);
+    dmp_set_fifo_rate(1);
+    mpu_set_dmp_state(1);
+    //enable interrupts and turn on TMR2
+    INTCONbits.PEIE = 1;
+    INTCONbits.GIE = 1;
+    T2CONbits.TMR2ON = 1;
     while (1) {
         if (dataReady) {
             dataReady = 0;
+            LATDbits.LATD0 ^= 1;
             unsigned char sensors;
             unsigned char more;
-            mpu_read_fifo(gyro, accel, &timeStamp, &sensors, &more);
+            unsigned long timeStamp = 0;
+            more = 0;
+            do {
+                //mpu_read_fifo(gyro, accel, &timeStamp, &sensors, &more);
+                error = dmp_read_fifo(gyro, accel, quat, &timeStamp, &sensors, &more);
+                //printf("More = %u\r\n", more);
+            } while (more > 0);
+            //printf("Time = %lu Error %d\r\n", timeStamp, error);
             printf("Accel: %d %d %d\r\n", accel[0], accel[1], accel[2]);
-            printf("Gyro: %d %d %d\r\n\r\n", gyro[0], gyro[1], gyro[2]);
+            printf("Gyro: %d %d %d\r\n", gyro[0], gyro[1], gyro[2]);
+            //printf("Quat: %ld %ld %ld %ld\r\n\r\n", quat[0], quat[1], quat[2], quat[3]);
+            computeEulerAngles(quat);
         }
     }
 }
@@ -141,4 +195,45 @@ void __interrupt(high_priority) HighIsr(void) {
 void putch(char c) {
     while (TX1IF == 0);
     TXREG1 = c;
+}
+
+void computeEulerAngles(long *quat) {
+    char degrees = 1;
+    float dqw = quat[0] / 1073741824.0;
+    float dqx = quat[1] / 1073741824.0;
+    float dqy = quat[2] / 1073741824.0;
+    float dqz = quat[3] / 1073741824.0;
+
+    //    float ysqr = dqy * dqy;
+    //    float t0 = -2.0f * (ysqr + dqz * dqz) + 1.0f;
+    //    float t1 = +2.0f * (dqx * dqy - dqw * dqz);
+    //    float t2 = -2.0f * (dqx * dqz + dqw * dqy);
+    //    float t3 = +2.0f * (dqy * dqz - dqw * dqx);
+    //    float t4 = -2.0f * (dqx * dqx + ysqr) + 1.0f;
+    //  
+    //	// Keep t2 within range of asin (-1, 1)
+    //    t2 = t2 > 1.0f ? 1.0f : t2;
+    //    t2 = t2 < -1.0f ? -1.0f : t2;
+    //  
+    //    float pitch = asin(t2) * 2;
+    //    float roll = atan2(t3, t4);
+    //    float yaw = atan2(t1, t0);
+
+    //My method for pitch and roll
+    //TODO Add yaw calculation?
+    float roll = atan2(dqy * dqz + dqw * dqx, 0.5f - (dqx * dqx + dqy * dqy));
+    float pitch = asin(-2.0f * (dqx * dqz - dqw * dqy));
+    float yaw = 0.0;
+
+
+#define PI 3.14159
+    if (degrees) {
+        pitch *= (180.0 / PI);
+        roll *= (180.0 / PI);
+        yaw *= (180.0 / PI);
+        //if (pitch < 0) pitch = 360.0 + pitch;
+        //if (roll < 0) roll = 360.0 + roll;
+        //if (yaw < 0) yaw = 360.0 + yaw;	
+    }
+    printf("Pitch = %.1f Roll = %.1f Yaw = %.1f\r\n\r\n", pitch, roll, yaw);
 }

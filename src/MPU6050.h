@@ -25,7 +25,10 @@ extern "C" {
     extern unsigned long tickCount;
     int pic18_delay_ms(unsigned long num_ms);
     int pic18_get_ms(unsigned long *count);
-
+    
+    //Utility fucntions
+    void mpuReset(void);
+    
     //DMP library defines
     #define MPU6050
     #define EMPL_NO_64BIT
