@@ -19,7 +19,7 @@ int pic18_i2c_disable(void) {
 int pic18_i2c_write(unsigned char slave_addr, unsigned char reg_addr, unsigned char length, unsigned char const *data) {
     SSP2CON2bits.SEN = 1;
     while (SSP2CON2bits.SEN == 1);
-    SSP2BUF = slave_addr << 1; //TODO Make sure 7 bit address is used by MPU code
+    SSP2BUF = slave_addr << 1;
     while (SSP2STATbits.BF || SSP2STATbits.R_W);
     if (SSP2CON2bits.ACKSTAT == 1) {
         SSP2CON2bits.PEN = 1;
@@ -87,4 +87,14 @@ int pic18_get_ms(unsigned long *count) {
     *count = tickCount;
     INTCONbits.GIE = 1;
     return 0;
+}
+
+void mpuReset(void) {
+    //Note this may only work with MPU6050
+    unsigned char reg = 0x80;
+    pic18_i2c_write(0x68, 107, 1, &reg); //Reset
+    reg = 0;
+    do {
+        pic18_i2c_read(0x68, 107, 1, &reg);
+    } while (reg & 0x80);
 }
