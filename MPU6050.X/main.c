@@ -170,9 +170,7 @@ void main(void) {
             do {
                 //mpu_read_fifo(gyro, accel, &timeStamp, &sensors, &more);
                 error = dmp_read_fifo(gyro, accel, quat, &timeStamp, &sensors, &more);
-                //printf("More = %u\r\n", more);
             } while (more > 0);
-            //printf("Time = %lu Error %d\r\n", timeStamp, error);
             printf("Accel: %d %d %d\r\n", accel[0], accel[1], accel[2]);
             printf("Gyro: %d %d %d\r\n", gyro[0], gyro[1], gyro[2]);
             //printf("Quat: %ld %ld %ld %ld\r\n\r\n", quat[0], quat[1], quat[2], quat[3]);
