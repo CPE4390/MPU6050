@@ -31,7 +31,7 @@ extern "C" {
     
     //DMP library defines
     #define MPU6050
-    #define EMPL_NO_64BIT
+    //#define EMPL_NO_64BIT
     #define i2c_write   pic18_i2c_write
     #define i2c_read    pic18_i2c_read
     #define delay_ms    pic18_delay_ms
